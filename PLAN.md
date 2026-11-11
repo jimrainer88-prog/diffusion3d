@@ -15,7 +15,7 @@ Pipeline: `photo -> background removal -> image-to-3D -> GLB -> mesh check`
 Before running models on the 3060: `sudo systemctl stop ollama` (frees GPU memory).
 
 ## Versions
-- Python **3.11**
+- Python **3.12**
 - PyTorch 2.x with **CUDA 12.4** (both phases)
 - TripoSR and TRELLIS.2 are installed by cloning their official GitHub repos into `third_party/` (they are not pip packages). Always follow their README for install and inference APIs.
 

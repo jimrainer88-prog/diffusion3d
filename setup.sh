@@ -1,23 +1,26 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
 
-# Create virtual environment with Python 3.12 (available in system)
-python3 -m venv .venv
-
-# Activate virtual environment
+PY=$(command -v python3.12 || command -v python3)
+"$PY" -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip wheel setuptools
 
-# Install PyTorch for CUDA 12.4 (try to install first, but if that fails, use compatible version)
-echo "Attempting to install PyTorch with CUDA 12.1 support..."
-pip install torch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1 --index-url https://download.pytorch.org/whl/cu121 || \
-    echo "Failed to install with CUDA 12.1, installing CPU version instead" && pip install torch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1
+# PyTorch with CUDA 12.4: fails loudly instead of falling back to CPU
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 
-# Install other requirements
 pip install -r requirements.txt
 
-# Clone TripoSR into third_party/
-if [ ! -d "third_party/triposr" ]; then
-    echo "Cloning TripoSR..."
-    git clone https://github.com/VAST-AI-Research/TripoSR.git third_party/triposr
+if [ ! -d third_party/triposr ]; then
+  git clone https://github.com/VAST-AI-Research/TripoSR.git third_party/triposr
 fi
+# TripoSR deps, incl. torchmcubes (compiled against the torch installed above)
+pip install -r third_party/triposr/requirements.txt
 
-echo "Setup complete!"
+python - <<'PYEOF'
+import torch
+print("torch", torch.__version__, "| CUDA available:", torch.cuda.is_available())
+assert torch.cuda.is_available(), "CUDA not available: check the NVIDIA driver"
+PYEOF
+echo "Setup complete"
