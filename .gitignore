@@ -1,0 +1,14 @@
+.venv/
+third_party/
+.idea/
+__pycache__/
+*.pyc
+# generated models and weights
+*.glb
+*.ckpt
+*.pth
+*.safetensors
+*.bin
+# data: keep folder structure, ignore contents
+data/*/*
+!data/*/.gitkeep
