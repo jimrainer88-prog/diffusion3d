@@ -1,143 +1,86 @@
-# Project Plan: 2D Puppy Photo to 3D Model Converter
+# diffusion3d — Puppy photos to 3D models
 
-## Project Overview
-This project converts 2D puppy photos into 3D models (GLB format) using a two-phase pipeline:
-1. Local phase (RTX 3060 with TripoSR) 
-2. Cloud phase (TRELLIS.2 on 24GB+ GPU via Docker)
+## Goal
+Turn 2D photos of puppies into textured 3D models (GLB).
 
-## Project Structure
+Pipeline: `photo -> background removal -> image-to-3D -> GLB -> mesh check`
+
+## Where things run
+| Phase | Machine | Model | Why |
+|---|---|---|---|
+| 1. Local | Ubuntu box, RTX 3060 12 GB | TripoSR (MIT) | Fits in 12 GB, fast |
+| 2. Cloud | GPU with 24 GB+ (L4 / A10 / 4090 / A100) on RunPod or Modal | TRELLIS.2 (MIT) | Better shape + textures |
+| Editing | Mac | — | Code editing only, no GPU work |
+
+Before running models on the 3060: `sudo systemctl stop ollama` (frees GPU memory).
+
+## Versions
+- Python **3.11**
+- PyTorch 2.x with **CUDA 12.4** (both phases)
+- TripoSR and TRELLIS.2 are installed by cloning their official GitHub repos into `third_party/` (they are not pip packages). Always follow their README for install and inference APIs.
+
+## Project structure
 ```
-puppy-3d-converter/
-├── README.md
-├── PLAN.md
-├── requirements.txt
-├── Dockerfile
-├── .dockerignore
-├── local/
-│   ├── __init__.py
-│   ├── background_removal.py
-│   ├── triposr_pipeline.py
-│   └── main_local.py
-├── cloud/
-│   ├── __init__.py
-│   ├── trellis_pipeline.py
-│   └── main_cloud.py
+diffusion3d/
+├── PLAN.md                 this file
+├── QWEN.md                 rules for the coding agent
+├── README.md               how to use the project
+├── .gitignore              data/, third_party/, .venv/, *.glb, weights, .idea/
+├── requirements.txt        shared deps: torch, rembg, pillow, numpy, trimesh, requests, pyyaml
+├── setup.sh                python3.11 venv + pip install + git clone TripoSR into third_party/
+├── configs/
+│   └── config.yaml         image size, paths, cloud endpoint URL
 ├── utils/
 │   ├── __init__.py
-│   ├── image_utils.py
-│   └── model_utils.py
-├── data/
-│   ├── input/
-│   └── output/
-├── tests/
+│   ├── image_utils.py      load / crop / center on white square
+│   └── mesh_utils.py       trimesh checks: vertices, faces, watertight, size
+├── local/
 │   ├── __init__.py
-│   ├── test_background_removal.py
-│   └── test_pipeline.py
-└── configs/
-    ├── local_config.yaml
-    └── cloud_config.yaml
+│   ├── background_removal.py   rembg wrapper
+│   ├── triposr_pipeline.py     calls official TripoSR code, returns a mesh
+│   └── main_local.py           CLI: data/input -> data/processed -> data/output
+├── cloud/
+│   ├── Dockerfile          CUDA 12.4 + TRELLIS.2 + FastAPI
+│   ├── server.py           runs ON the cloud GPU: POST /generate (image in, GLB out)
+│   ├── client.py           runs on YOUR machine: sends data/processed/*.png, saves GLBs
+│   └── README.md           deploy steps for RunPod / Modal, cost notes
+├── data/                   gitignored (keep .gitkeep files)
+│   ├── input/              your puppy photos
+│   ├── processed/          background removed, 1024x1024
+│   └── output/             .glb files
+├── third_party/            gitignored, cloned model repos
+└── tests/
+    ├── test_image_utils.py
+    └── test_mesh_utils.py
 ```
 
-## Phase 1: Local Processing (RTX 3060)
+## Steps — one per agent session, /clear in between
+Don't start a step until the previous one passes its "Done" check.
 
-### Dependencies
-- Python 3.8+
-- PyTorch 2.0+
-- torchvision
-- rembg
-- trimesh
-- open3d
-- numpy
-- opencv-python
+1. **Skeleton**: create folders, empty `__init__.py` files, `.gitkeep` in data/ subfolders, `.gitignore`, short `README.md`.
+   *Done:* `tree -a -I .git` matches the structure; `git status` doesn't show data/ or third_party/ contents.
+2. **Setup**: `requirements.txt` and `setup.sh` (creates `.venv` with python3.11, installs PyTorch for CUDA 12.4 and requirements, clones TripoSR into third_party/ and installs its requirements).
+   *Done:* on the Ubuntu box `bash setup.sh` finishes, and `.venv/bin/python -c "import torch; print(torch.cuda.is_available())"` prints `True`.
+3. **Image prep**: `utils/image_utils.py` + `local/background_removal.py`, and a `main_local.py --step preprocess` mode.
+   *Done:* every photo in data/input/ has a clean, centered 1024x1024 PNG in data/processed/.
+4. **Local 3D**: `local/triposr_pipeline.py` + `main_local.py --step generate`.
+   *Done:* at least one GLB in data/output/ opens in Blender or an online GLB viewer.
+5. **Mesh check + tests**: `utils/mesh_utils.py`, `main_local.py --step check`, and the two test files (pytest).
+   *Done:* check prints stats for every GLB; `pytest` passes.
+6. **Cloud server**: `cloud/Dockerfile`, `cloud/server.py`, `cloud/README.md`.
+   *Done:* image builds; on a 24 GB+ GPU, `curl -F image=@test.png http://HOST:8000/generate -o out.glb` returns a GLB.
+7. **Cloud client**: `cloud/client.py` reads the endpoint from `configs/config.yaml` or env var `D3D_ENDPOINT`.
+   *Done:* the same photos produce GLBs from the cloud; compare them with the Phase 1 results.
 
-### Key Components
-1. **Background Removal** (`local/background_removal.py`)
-   - Uses rembg to remove background from input images
-   - Supports multiple background removal algorithms
-   - Maintains image quality and transparency
-   
-2. **TripoSR Pipeline** (`local/triposr_pipeline.py`)
-   - Implementation of TripoSR's 3D reconstruction pipeline
-   - Uses local GPU resources for processing
-   - Converts processed images into 3D meshes
-   
-3. **Local Main Module** (`local/main_local.py`)
-   - Orchestrates the local processing pipeline
-   - Manages input/output handling
-   - Handles error cases and logging
+## Photo guidelines
+- One puppy per photo, whole body visible, plain background, good light.
+- 3/4 side view works best. The back side is invented by the model, so always inspect it.
+- Fluffy fur comes out smooth ("clay-like") with every current model.
 
-## Phase 2: Cloud Processing (TRELLIS.2)
+## Licenses
+- TripoSR: MIT. TRELLIS.2: MIT (check bundled third-party components).
+- Hunyuan3D-2.1 is an alternative, but its license excludes the EU, UK and South Korea.
+- Never commit model weights, data/ contents or third_party/.
 
-### Dependencies
-- Docker
-- CUDA toolkit 11.8+
-- PyTorch 2.0+ optimized for cloud GPU
-- NVIDIA container toolkit
-- RunPod/Modal deployment configuration
-
-### Key Components
-1. **TRELLIS.2 Pipeline** (`cloud/trellis_pipeline.py`)
-   - Optimized version of the processing pipeline for cloud GPUs
-   - Utilizes larger 24GB+ VRAM for higher resolution models
-   - Implements parallel processing where possible
-   
-2. **Cloud Main Module** (`cloud/main_cloud.py`)
-   - Orchestrates cloud processing pipeline
-   - Manages Docker container deployment
-   - Handles communication with cloud GPU services
-
-## Pipeline Steps
-
-### Phase 1 (Local)
-1. Input image loading from `data/input/`
-2. Background removal using rembg
-3. Preprocessing for 3D conversion
-4. TripoSR-based 3D reconstruction 
-5. Output GLB files to `data/output/`
-
-### Phase 2 (Cloud)
-1. Input image loading from `data/input/`
-2. Cloud-ready preprocessing 
-3. TRELLIS.2 optimization processing
-4. High-resolution 3D model generation
-5. Output GLB files to `data/output/`
-
-## Docker Configuration
-
-### Dockerfile
-- Uses PyTorch CUDA base image
-- Installs required dependencies
-- Sets up environment variables for GPU access
-- Exposes necessary ports
-- Defines entrypoint and command
-
-### Deployment Targets
-- RunPod configuration
-- Modal deployment setup
-- Cloud GPU resource management
-
-## Testing Approach
-1. Unit tests for background removal
-2. Integration tests for pipeline modules
-3. Performance benchmarks between local and cloud phases
-4. Quality assurance checks for 3D model outputs
-
-## Configuration Files
-- `configs/local_config.yaml`: Local GPU settings, memory limits
-- `configs/cloud_config.yaml`: Cloud resource limits, environment variables
-
-## Input/Output Handling
-- Input: 2D images (JPG, PNG) from `data/input/`
-- Output: GLB files in `data/output/`
-- Intermediate files for processing validation
-
-## Resource Considerations
-### Local Phase (RTX 3060 - 12GB)
-- Memory management for 3D reconstruction
-- Image size optimization 
-- Computation time limitations
-
-### Cloud Phase (TRELLIS.2 - 24GB+)
-- Utilizes higher VRAM for detailed models
-- Parallel processing capabilities
-- Cost optimization considerations
+## Not now (maybe later)
+Multiple background-removal backends, batch parallelism, benchmarks, open3d.
