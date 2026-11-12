@@ -16,7 +16,9 @@ if [ ! -d third_party/triposr ]; then
   git clone https://github.com/VAST-AI-Research/TripoSR.git third_party/triposr
 fi
 # TripoSR deps, incl. torchmcubes (compiled against the torch installed above)
-pip install -r third_party/triposr/requirements.txt
+pip install scikit-build-core cmake ninja pybind11
+pip install --no-build-isolation git+https://github.com/tatsy/torchmcubes.git
+pip install -r <(grep -v torchmcubes third_party/triposr/requirements.txt)
 
 python - <<'PYEOF'
 import torch
