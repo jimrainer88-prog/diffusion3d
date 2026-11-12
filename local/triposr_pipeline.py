@@ -53,7 +53,7 @@ def generate_mesh_from_image(image_path, output_dir, model, device='cuda:0', mc_
         scene_codes = model([image], device=device)
 
     # Extract mesh using marching cubes
-    meshes = model.extract_mesh(scene_codes, not True, resolution=mc_resolution)
+    meshes = model.extract_mesh(scene_codes, True, resolution=mc_resolution)
 
     # Create output file name based on input image name
     input_name = Path(image_path).stem

@@ -6,43 +6,20 @@ from PIL import Image
 import numpy as np
 
 
-def load_and_center_image(image_path, target_size):
+def load_and_center_image(image_path, target_size, margin=0.1):
     """
-    Load an image and center it on a transparent square background.
-
-    Args:
-        image_path (str): Path to input image
-        target_size (int): Target size for square image
-
-    Returns:
-        PIL.Image: Centered image with transparent background
+    Load an RGBA cut-out, crop to the subject (non-transparent pixels),
+    and center it on a transparent square canvas of target_size.
     """
-    # Open the image
-    img = Image.open(image_path)
-
-    # Convert to RGBA if necessary to maintain transparency
-    if img.mode != 'RGBA':
-        img = img.convert('RGBA')
-
-    # Get original dimensions
-    orig_width, orig_height = img.size
-
-    # Calculate the size for the square crop (smaller dimension)
-    min_dim = min(orig_width, orig_height)
-
-    # Calculate crop box to center the image
-    left = (orig_width - min_dim) // 2
-    top = (orig_height - min_dim) // 2
-    right = left + min_dim
-    bottom = top + min_dim
-
-    # Crop to square
-    img_square = img.crop((left, top, right, bottom))
-
-    # Resize to target size
-    img_resized = img_square.resize((target_size, target_size), Image.LANCZOS)
-
-    return img_resized
+    img = Image.open(image_path).convert("RGBA")
+    bbox = img.getchannel("A").getbbox()  # bounding box of the dog
+    if bbox:
+        img = img.crop(bbox)
+    w, h = img.size
+    side = int(max(w, h) * (1 + 2 * margin))
+    canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    canvas.paste(img, ((side - w) // 2, (side - h) // 2), img)
+    return canvas.resize((target_size, target_size), Image.LANCZOS)
 
 
 def save_image_with_padding(image, output_path, target_size):

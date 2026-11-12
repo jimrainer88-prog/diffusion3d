@@ -43,6 +43,6 @@ def remove_background_batch(input_dir, output_dir):
     for filename in os.listdir(input_dir):
         if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             input_path = os.path.join(input_dir, filename)
-            output_path = os.path.join(output_dir, filename)
+            output_path = os.path.join(output_dir, os.path.splitext(filename)[0] + ".png")
 
             remove_background(input_path, output_path)
