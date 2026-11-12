@@ -18,9 +18,10 @@ def get_faces(mesh_path):
 
 
 def has_colors(mesh_path):
-    """Check if mesh has vertex colors."""
+    """True only if the mesh really stores vertex/face colors or a texture.
+    (trimesh fills a default gray vertex_colors array even when there are none.)"""
     mesh = trimesh.load(mesh_path, force='mesh')
-    return hasattr(mesh, 'visual') and hasattr(mesh.visual, 'vertex_colors')
+    return mesh.visual.kind in ("vertex", "face", "texture")
 
 
 def is_watertight(mesh_path):

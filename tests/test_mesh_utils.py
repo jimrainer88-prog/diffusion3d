@@ -18,7 +18,7 @@ def test_mesh_functions_with_synthetic_box():
     # Create a simple box mesh using trimesh
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create a simple box mesh
-        box = trimesh.creation.box(extent=[1, 1, 1])
+        box = trimesh.creation.box(extents=[1, 1, 1])
         
         # Save box to GLB file
         glb_path = os.path.join(tmpdir, "test_box.glb")
@@ -46,7 +46,7 @@ def test_check_mesh_function():
     """Test the complete check_mesh function."""
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create a simple box mesh
-        box = trimesh.creation.box(extent=[2, 3, 4])
+        box = trimesh.creation.box(extents=[2, 3, 4])
         
         # Save to GLB file
         glb_path = os.path.join(tmpdir, "test_box2.glb")
