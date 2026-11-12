@@ -5,3 +5,4 @@ trimesh
 requests
 pyyaml
 opencv-python-headless
+onnxruntime
