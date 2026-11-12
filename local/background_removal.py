@@ -1,3 +1,4 @@
+from pathlib import Path
 """
 Background removal using rembg
 """
@@ -21,7 +22,7 @@ def remove_background(image_path, output_path):
     output_image = remove(input_image)
     
     # Save the result
-    output_image.save(output_path)
+    output_image.save(Path(output_path).with_suffix(".png"))
     
 def remove_background_batch(input_dir, output_dir):
     """
