@@ -15,6 +15,15 @@ import numpy as np
 from tsr.system import TSR
 from tsr.utils import remove_background, resize_foreground
 
+_REMBG_SESSION = None
+def _get_rembg_session():
+    global _REMBG_SESSION
+    if _REMBG_SESSION is None:
+        import rembg
+        _REMBG_SESSION = rembg.new_session()
+    return _REMBG_SESSION
+
+
 def generate_mesh_from_image(image_path, output_dir, device='cuda:0', mc_resolution=256):
     """
     Generate a 3D mesh from a processed RGBA image using TripoSR.
@@ -43,17 +52,14 @@ def generate_mesh_from_image(image_path, output_dir, device='cuda:0', mc_resolut
     
     print(f"Processing image: {image_path}")
     
-    # Load and prepare the image
-    image = Image.open(image_path).convert("RGBA")
-    
-    # Remove background using rembg approach similar to TripoSR run.py
-    image_array = np.array(image).astype(np.float32) / 255.0
-    image_array = image_array[:, :, :3] * image_array[:, :, 3:4] + (1 - image_array[:, :, 3:4]) * 0.5
-    image = Image.fromarray((image_array * 255.0).astype(np.uint8))
-    
-    # Resize foreground to fill the frame (as TripoSR does)
-    image = resize_foreground(image, 0.85)
-    
+    # Prepare exactly like TripoSR run.py: cut out -> resize (RGBA) -> gray background
+    image = Image.open(image_path)
+    image = remove_background(image, _get_rembg_session())  # RGBA cut-out (skipped if already RGBA)
+    image = resize_foreground(image, 0.85)                    # needs RGBA
+    arr = np.array(image).astype(np.float32) / 255.0
+    arr = arr[:, :, :3] * arr[:, :, 3:4] + (1 - arr[:, :, 3:4]) * 0.5
+    image = Image.fromarray((arr * 255.0).astype(np.uint8))
+
     # Run model on the prepared image
     with torch.no_grad():
         scene_codes = model([image], device=device)
@@ -99,6 +105,7 @@ def generate_mesh_batch(input_dir, output_dir, device='cuda:0', mc_resolution=25
                 generated_meshes.append(mesh_path)
                 print(f"Successfully generated: {mesh_path}")
             except Exception as e:
+                import traceback; traceback.print_exc()
                 print(f"Error processing {filename}: {str(e)}")
                 continue
     
