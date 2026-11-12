@@ -18,6 +18,7 @@ try:
     from local.background_removal import remove_background_batch
     from local.triposr_pipeline import generate_mesh_batch
     from utils.config import config
+    from utils.mesh_utils import check_mesh
 except ImportError as e:
     # Try to add additional paths if needed
     sys.path.insert(0, os.path.join(project_root, 'configs'))
@@ -28,6 +29,7 @@ except ImportError as e:
     from local.background_removal import remove_background_batch
     from local.triposr_pipeline import generate_mesh_batch
     from utils.config import config
+    from utils.mesh_utils import check_mesh
 
 
 def main():
@@ -70,17 +72,38 @@ def main():
         # Get paths from config
         processed_dir = config['processed_dir']
         output_dir = config['output_dir']
-        
+
         # Ensure output directory exists
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # Generate 3D meshes from processed images in the processed directory
         print(f"Generating 3D meshes from images in {processed_dir}")
         generated_meshes = generate_mesh_batch(processed_dir, output_dir)
         print(f"Generated {len(generated_meshes)} meshes successfully!")
     elif args.step == "check":
         print("Running mesh check step...")
-        # TODO: Implement mesh checking
+        # Get paths from config
+        output_dir = config['output_dir']
+
+        # Check all GLB files in output directory
+        checked_count = 0
+        for filename in os.listdir(output_dir):
+            if filename.lower().endswith('.glb'):
+                mesh_path = os.path.join(output_dir, filename)
+                try:
+                    stats = check_mesh(mesh_path)
+                    print(f"Mesh {filename}:")
+                    print(f"  Vertices: {stats['vertices']}")
+                    print(f"  Faces: {stats['faces']}")
+                    print(f"  Has colors: {stats['has_colors']}")
+                    print(f"  Watertight: {stats['watertight']}")
+                    print(f"  Bounding box size: {stats['bounding_box_size']}")
+                    print()
+                    checked_count += 1
+                except Exception as e:
+                    print(f"Error checking mesh {filename}: {e}")
+
+        print(f"Checked {checked_count} meshes successfully!")
 
 if __name__ == "__main__":
     main()
