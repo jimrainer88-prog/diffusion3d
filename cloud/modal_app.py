@@ -42,10 +42,16 @@ image = image.run_commands(
     "python -c 'import nvdiffrast.torch, cumesh, flex_gemm, o_voxel; print(\"extensions OK\")'",
     gpu="A100",
 )
+# TRELLIS.2 expects the older DINOv3 layout (model.layer) in transformers
+image = image.pip_install("transformers==4.57.1")
+image = image.run_commands("python -c 'import transformers; print(\"transformers\", transformers.__version__)'")
+# flash-attn: the setup.sh build failed silently (pre-gcc); use the prebuilt wheel
+image = image.run_commands("pip install flash-attn==2.7.4.post1 --no-build-isolation", gpu="A100")
+image = image.run_commands("python -c 'import flash_attn; print(\"flash_attn\", flash_attn.__version__)'", gpu="A100")
 image = image.env({"PYTHONPATH": REPO})
 
 
-@app.cls(gpu="A100", image=image, volumes={"/cache": hf_cache}, secrets=[modal.Secret.from_name("huggingface")],
+@app.cls(gpu="A100", max_containers=1, memory=32768, image=image, volumes={"/cache": hf_cache}, secrets=[modal.Secret.from_name("huggingface")],
          scaledown_window=120, timeout=900)
 class Trellis:
     @modal.enter()
@@ -68,7 +74,7 @@ class Trellis:
             coords=mesh.coords, attr_layout=mesh.layout, voxel_size=mesh.voxel_size,
             aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
             decimation_target=200000, texture_size=2048,
-            remesh=True, remesh_band=1, remesh_project=0,
+            remesh=False,
         )
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "out.glb")
