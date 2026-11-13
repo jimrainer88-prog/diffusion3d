@@ -67,10 +67,18 @@ Don't start a step until the previous one passes its "Done" check.
    *Done:* at least one GLB in data/output/ opens in Blender or an online GLB viewer.
 5. **Mesh check + tests**: `utils/mesh_utils.py`, `main_local.py --step check`, and the two test files (pytest).
    *Done:* check prints stats for every GLB; `pytest` passes.
-6. **Cloud server**: `cloud/Dockerfile`, `cloud/server.py`, `cloud/README.md`.
-   *Done:* image builds; on a 24 GB+ GPU, `curl -F image=@test.png http://HOST:8000/generate -o out.glb` returns a GLB.
-7. **Cloud client**: `cloud/client.py` reads the endpoint from `configs/config.yaml` or env var `D3D_ENDPOINT`.
-   *Done:* the same photos produce GLBs from the cloud; compare them with the Phase 1 results.
+6. **Cloud server on Modal**: `cloud/modal_app.py`.
+   - `modal.Image` from a CUDA 12.4 devel base, with torch/CUDA pinned and TRELLIS.2 installed exactly as its official README says. The image clones its own copy of the repo.
+   - Model weights cached in a `modal.Volume` (download once, not on every start).
+   - An `@app.cls(gpu="A100")` class that loads the pipeline once in `@modal.enter()`.
+   - A web endpoint `POST /generate`: image in, GLB out.
+   - Short idle timeout so the GPU shuts down after use.
+   *Done:* `modal serve cloud/modal_app.py` prints a URL, and
+   `curl -F image=@data/processed/images.png <URL>/generate -o out.glb` returns a GLB that opens in a viewer.
+   Then `modal deploy cloud/modal_app.py` for a permanent URL.
+7. **Cloud client**: `cloud/client.py` reads the endpoint URL from `configs/config.yaml` or env var `D3D_ENDPOINT`,
+   sends data/processed/*.png, saves GLBs to data/output/ with a `_trellis` suffix.
+   *Done:* the same puppies exist as both `name.glb` (TripoSR) and `name_trellis.glb` (TRELLIS.2) for comparison.
 
 ## Photo guidelines
 - One puppy per photo, whole body visible, plain background, good light.
