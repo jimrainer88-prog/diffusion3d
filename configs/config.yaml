@@ -3,4 +3,4 @@ image_size: 1024
 input_dir: data/input
 processed_dir: data/processed
 output_dir: data/output
-endpoint_url: "http://localhost:8000"
+endpoint_url: "https://jimrainer88--d3d-trellis2-trellis-generate.us-east.modal.run"

@@ -61,7 +61,7 @@ class Trellis:
         self.pipe.cuda()
         hf_cache.commit()  # keep downloaded weights for next cold start
 
-    @modal.fastapi_endpoint(method="POST")
+    @modal.fastapi_endpoint(method="POST", requires_proxy_auth=True)
     def generate(self, image: UploadFile = File(...), seed: int = Form(0)):
         import o_voxel
         from PIL import Image
