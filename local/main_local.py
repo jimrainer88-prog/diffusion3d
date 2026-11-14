@@ -56,7 +56,7 @@ def main():
         # Center and resize images to square
         print(f"Centering and resizing images to {target_size}x{target_size}")
         for filename in os.listdir(processed_dir):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
                 input_path = os.path.join(processed_dir, filename)
                 output_path = os.path.join(processed_dir, filename)  # Overwrite the processed image
 

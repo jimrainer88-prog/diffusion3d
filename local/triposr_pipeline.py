@@ -98,7 +98,7 @@ def generate_mesh_batch(input_dir, output_dir, device='cuda:0', mc_resolution=25
 
     # Process each image file in the input directory
     for filename in os.listdir(input_dir):
-        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
             image_path = os.path.join(input_dir, filename)
 
             try:

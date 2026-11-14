@@ -4,7 +4,7 @@ import os
 import tempfile
 
 import modal
-from fastapi import File, Response, UploadFile
+from fastapi import File, Form, Response, UploadFile
 
 app = modal.App("d3d-trellis2")
 hf_cache = modal.Volume.from_name("d3d-hf-cache", create_if_missing=True)
@@ -62,22 +62,35 @@ class Trellis:
         hf_cache.commit()  # keep downloaded weights for next cold start
 
     @modal.fastapi_endpoint(method="POST")
-    def generate(self, image: UploadFile = File(...)):
+    def generate(self, image: UploadFile = File(...), seed: int = Form(0)):
         import o_voxel
         from PIL import Image
 
         img = Image.open(io.BytesIO(image.file.read()))
-        mesh = self.pipe.run(img)[0]
+        img = self.pipe.preprocess_image(img)
+        outputs = self.pipe.run(
+            img,
+            seed=seed,
+            preprocess_image=False,
+            sparse_structure_sampler_params={
+                "steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.7, "rescale_t": 5.0},
+            shape_slat_sampler_params={
+                "steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.5, "rescale_t": 3.0},
+            tex_slat_sampler_params={
+                "steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.0, "rescale_t": 3.0},
+            pipeline_type="1024_cascade",
+        )
+        mesh = outputs[0]
         mesh.simplify(16777216)  # nvdiffrast limit (from example.py)
         glb = o_voxel.postprocess.to_glb(
             vertices=mesh.vertices, faces=mesh.faces, attr_volume=mesh.attrs,
             coords=mesh.coords, attr_layout=mesh.layout, voxel_size=mesh.voxel_size,
             aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
             decimation_target=200000, texture_size=2048,
-            remesh=False,
+            remesh=True, remesh_band=1, remesh_project=0,
         )
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "out.glb")
-            glb.export(path, extension_webp=True)
+            glb.export(path, extension_webp=False)
             data = open(path, "rb").read()
         return Response(content=data, media_type="model/gltf-binary")
