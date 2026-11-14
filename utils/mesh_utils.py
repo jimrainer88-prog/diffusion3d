@@ -46,7 +46,18 @@ def check_mesh(mesh_path):
         'vertices': get_vertices(mesh_path),
         'faces': get_faces(mesh_path),
         'has_colors': has_colors(mesh_path),
+        'open_edges_pieces': hole_stats(mesh_path),
         'watertight': is_watertight(mesh_path),
         'bounding_box_size': get_bounding_box_size(mesh_path)
     }
     return stats
+
+
+def hole_stats(mesh_path):
+    """(open_edges, pieces): edges used by only one face = hole borders; separate connected parts."""
+    import numpy as np
+    mesh = trimesh.load(mesh_path, force='mesh')
+    _, counts = np.unique(mesh.edges_sorted, axis=0, return_counts=True)
+    open_edges = int((counts == 1).sum())
+    pieces = len(mesh.split(only_watertight=False))
+    return open_edges, pieces
