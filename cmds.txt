@@ -1,8 +1,69 @@
-rsync -avz --progress ivi@ivi-ubuntu.local:~/projects/git/diffusion3d/data/panels ~/Downloads/diffusion3d/
-rsync -avz --progress ivi@ivi-ubuntu.local:~/projects/git/diffusion3d/data/output ~/Downloads/diffusion3d/
+# diffusion3d — pipeline cheat sheet
+# Two machines: Ubuntu box (ivi-ubuntu, RTX 3060) does all GPU work; Mac is for viewing.
+# Two venvs on Ubuntu: .venv (rembg/trimesh/requests, old pinned deps for TripoSR)
+#                      .venv-img (diffusers/SDXL, new deps — they cannot coexist)
 
-rsync -avz --progress --include='*/' --include='*.png' --exclude='*' \
-  ivi@ivi-ubuntu.local:~/projects/git/diffusion3d/data/output ~/Downloads/diffusion3d/
+
+# ───────────────────────────────── 3D: photo -> model ─────────────────────────────────
+# Local, free, on the 3060. Stop Ollama first — TripoSR needs the GPU.
+#   Put photos in data/input/. Full-size photos only: a thumbnail gives a shapeless blob.
+python -m local.main_local --step preprocess      # rembg cut-out, crop to subject, 1024 RGBA
+sudo systemctl stop ollama
+python -m local.main_local --step generate        # TripoSR -> data/output/<name>.glb
+sudo systemctl start ollama
+python -m local.main_local --step check           # verts, faces, colors, watertight, holes
+
+# Cloud (TRELLIS.2 on Modal A100) — better shape + real textures, ~$0.05-0.20/model
+source ~/.d3d_env                                 # MODAL_KEY / MODAL_SECRET
+python -m cloud.client --only puppy4.png --seed 0
+python -m cloud.client --only puppy4.png --seed 1 # seeds vary a LOT; keep the best
+python -m local.main_local --step check           # compare open_edges_pieces, fewer = better
+
+modal deploy cloud/modal_app.py                   # redeploy if `modal app list` shows none
 
 
-  ~/pull-comics.sh
+# ─────────────────────────── text -> image -> 3D (characters) ───────────────────────────
+python -m local.text_to_prompt /tmp/hongyuye.txt \
+  --style "semi-realistic character render, soft volumetric shading, detailed face, open eyes"
+./txt2img.sh --name hyreal --n 4                  # stops/starts Ollama itself
+#   Pick by SILHOUETTE, not prettiness: arms clear of torso, feet visible, nothing flying.
+#   Semi-realistic shading for 3D sources; flat cel shading gives a blank-mask face.
+
+
+# ──────────────────────────────── comics: prose -> page ────────────────────────────────
+# Whole chapter, split into scenes, one page each (SDXL loads once for all pages)
+./chapter.sh data/prompts/chapter71.txt 4 4       # <chapter> <scenes> <panels-per-page>
+
+# Single page
+./comic.sh data/prompts/chapter71_scene2.txt 4
+
+# Revise a page after hand-editing its JSON (no LLM, no GPU — seconds)
+nano data/prompts/panels_chapter71_scene2.json
+python -m local.text_to_panels --rebuild --tag chapter71_scene2
+python -m local.letter --tag chapter71_scene2
+
+# Redraw one panel only
+sudo systemctl stop ollama
+.venv-img/bin/python -m local.panels2img --tag chapter71_scene2 --only 2 --seed 7
+sudo systemctl start ollama
+
+# Characters live in data/prompts/bible.json — same block in every panel is what stops
+# drift. "WARNING: no bible entry for X" means that panel will render empty: fix first.
+
+
+# ─────────────────────────────── Claude Code model routing ───────────────────────────────
+~/claude-relay.sh                                 # DeepRelay: deepseek-v4.1-flash (1x, vision)
+~/claude-relay.sh deeprelay/glm-5.3               # harder problems (12x allowance, slower)
+~/claude-local.sh qwen3-coder:30b                 # fully local via Ollama, free
+~/qwen-local.sh qwen3-coder:30b                   # Qwen Code, local
+
+
+# ──────────────────────────────────── Mac: pull results ────────────────────────────────────
+~/pull-comics.sh                                  # rsync panels/ + output/*.png from Ubuntu
+
+
+# ─────────────────────────────────────── gotchas ───────────────────────────────────────
+# sed in-place: Ubuntu `sed -i '...'`   Mac `sed -i '' '...'`
+# SDXL prompts cut at 77 CLIP tokens — the tail is dropped silently, watch for the warning
+# Ollama and SDXL/TripoSR both want the whole 12 GB; never run them at once
+# Don't `pip install` diffusers into .venv — it breaks TripoSR's transformers 4.35
