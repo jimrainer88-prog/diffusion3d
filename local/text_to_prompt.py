@@ -33,7 +33,7 @@ MOTION = re.compile(
 
 # CLIP truncates at 77 tokens, so both of these stay short
 POSE = ("full body, standing, arms away from body, facing viewer, "
-        "plain white background, flat lighting, hair down, fabric hanging straight")
+        "plain white background, soft even lighting, hair down, fabric hanging straight")
 NEG = ("cropped, close-up, multiple views, 2girls, 3girls, multiple characters, text, "
        "watermark, busy background, dramatic shadows, windblown hair, flying ribbons, "
        "sash, cape, glowing weapon, aura, sitting, extra limbs, blurry")
