@@ -1,7 +1,7 @@
 """Prose -> comic panel script (JSON) via local Ollama, with the character bible merged in.
 
---rebuild re-derives the prompts from an existing panels.json without calling the LLM,
-so bible/style changes never reshuffle the story.
+--rebuild re-derives prompts from an existing script without calling the LLM, so bible
+or style changes never reshuffle the story.
 """
 import argparse
 import json
@@ -29,25 +29,49 @@ Passage:
 {text}
 >>>"""
 
-STYLE = "comic panel, anime style, clean lineart, flat cel shading, soft colors"
+STYLE = "comic panel, anime style, clean lineart, flat cel shading"
 NEG = "text, speech bubble, watermark, signature, multiple panels, border, blurry"
 FIELDS = ("subject", "hair", "outfit", "expression")
-# "close-up"/"medium"/"wide" are not Danbooru tags, so the model improvises the framing
-# (often into a macro shot of one eye). These are real tags and frame predictably.
+# "close-up"/"medium"/"wide" are not Danbooru tags, so the model improvises the framing.
+# These are real tags and frame predictably.
 SHOT = {"wide": "full body, wide shot", "medium": "upper body", "close-up": "portrait"}
-
-
 KEYS = {"shot", "setting", "character", "action", "dialogue", "prompt", "negative"}
+
+
+def script_path(tag):
+    return Path(f"data/prompts/panels_{tag}.json")
+
+
+# Xianxia prose calls people "Fairy Leng Tian" or "Senior Sister Leng"; the bible
+# keys on the bare name. Try aliases first, then strip the honorific.
+HONORIFICS = ("fairy", "senior sister", "senior brother", "junior sister",
+              "junior brother", "elder", "master", "lord")
+
+
+def resolve(name, bible):
+    if name in bible:
+        return bible[name]
+    for who in bible.values():
+        if name in who.get("aliases", []):
+            return who
+    low = name.lower()
+    for h in HONORIFICS:
+        if low.startswith(h + " "):
+            bare = low[len(h):].strip()
+            for key, who in bible.items():
+                k = key.lower()
+                if k.startswith(bare) or bare.startswith(k):
+                    return who
+    return {}
 
 
 def build_prompts(script):
     bible = json.loads(BIBLE.read_text()) if BIBLE.exists() else {}
-    for i, p in enumerate(script["panels"]):   # catch hand-edit typos like "dialog,ue"
-        for k in set(p) - KEYS:
+    for i, p in enumerate(script["panels"]):
+        for k in set(p) - KEYS:            # catch hand-edit typos like "dialog,ue"
             print(f"WARNING: panel {i} has unknown key {k!r}", file=sys.stderr)
-    for p in script["panels"]:
         name = p.get("character", "").strip()
-        who = bible.get(name, {})
+        who = resolve(name, bible)
         if name and not who:
             print(f"WARNING: no bible entry for {name!r} — that panel will have no character",
                   file=sys.stderr)
@@ -67,31 +91,33 @@ def build_prompts(script):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("textfile", nargs="?")
+    ap.add_argument("--tag", help="page id; default: the textfile's stem")
     ap.add_argument("--rebuild", action="store_true",
-                    help="re-derive prompts from the existing panels.json; no LLM, story unchanged")
+                    help="re-derive prompts from the existing script; no LLM, story unchanged")
     ap.add_argument("--model", default="qwen3:8b")
     ap.add_argument("--n", type=int, default=4)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--out", default="data/prompts/panels.json")
     args = ap.parse_args()
 
+    tag = args.tag or (Path(args.textfile).stem if args.textfile else "default")
+    out = script_path(tag)
+
     if args.rebuild:
-        script = json.loads(Path(args.out).read_text())
+        script = json.loads(out.read_text())
     else:
         if not args.textfile:
-            sys.exit("give a textfile, or use --rebuild")
+            sys.exit("give a textfile, or use --rebuild --tag <tag>")
         text = sys.stdin.read() if args.textfile == "-" else open(args.textfile).read()
         r = requests.post(OLLAMA, json={"model": args.model, "stream": False, "think": False,
                                         "format": "json", "options": {"seed": args.seed},
                                         "prompt": PANELS.format(n=args.n, text=text.strip())},
-                          timeout=600)
+                          timeout=900)
         r.raise_for_status()
         script = json.loads(r.json()["response"])
 
-    script = build_prompts(script)
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(json.dumps(script, indent=2, ensure_ascii=False))
-    print(json.dumps(script, indent=2, ensure_ascii=False))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(build_prompts(script), indent=2, ensure_ascii=False))
+    print(f"wrote {out}")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
-"""panels.json + data/panels/panel_*.png -> data/output/strip.png
+"""panels_<tag>.json + data/panels/<tag>/*.png -> data/output/strip_<tag>.png
 
 Each panel is a caption band (title/bubble) above the art, so speech never covers a face.
 """
+import argparse
 import json
 import textwrap
 from pathlib import Path
@@ -27,7 +28,12 @@ def wrapped(d, text, f, chars):
 
 
 def main():
-    script = json.loads(Path("data/prompts/panels.json").read_text())
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tag", default="default")
+    args = ap.parse_args()
+
+    script = json.loads(Path(f"data/prompts/panels_{args.tag}.json").read_text())
+    src_dir = Path(f"data/panels/{args.tag}")
     panels = script["panels"]
     rows = (len(panels) + COLS - 1) // COLS
     page = Image.new("RGB",
@@ -37,12 +43,11 @@ def main():
     probe = ImageDraw.Draw(page)
 
     for i, p in enumerate(panels):
-        src = Path(f"data/panels/panel_{i}.png")
+        src = src_dir / f"panel_{i}.png"
         if not src.exists():
             print("missing", src)
             continue
 
-        # measure everything that must sit above the art
         blocks = []
         if i == 0 and script.get("title"):
             blocks.append(("title", *wrapped(probe, script["title"], ft, 26)))
@@ -52,8 +57,7 @@ def main():
 
         cell = Image.new("RGB", (CELL, CELL), "white")
         art = Image.open(src).convert("RGB").resize((CELL, CELL))
-        # keep the TOP of the art — that's where the heads are
-        cell.paste(art.crop((0, 0, CELL, CELL - band)), (0, band))
+        cell.paste(art.crop((0, 0, CELL, CELL - band)), (0, band))  # keep the top: heads
 
         d = ImageDraw.Draw(cell)
         y = PAD
@@ -75,8 +79,9 @@ def main():
                           MARGIN + (i // COLS) * (CELL + GUTTER)))
 
     Path("data/output").mkdir(parents=True, exist_ok=True)
-    page.save("data/output/strip.png")
-    print("saved data/output/strip.png")
+    dest = f"data/output/strip_{args.tag}.png"
+    page.save(dest)
+    print("saved", dest)
 
 
 if __name__ == "__main__":
