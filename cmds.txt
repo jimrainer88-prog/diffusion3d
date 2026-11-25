@@ -1,0 +1,8 @@
+rsync -avz --progress ivi@ivi-ubuntu.local:~/projects/git/diffusion3d/data/panels ~/Downloads/diffusion3d/
+rsync -avz --progress ivi@ivi-ubuntu.local:~/projects/git/diffusion3d/data/output ~/Downloads/diffusion3d/
+
+rsync -avz --progress --include='*/' --include='*.png' --exclude='*' \
+  ivi@ivi-ubuntu.local:~/projects/git/diffusion3d/data/output ~/Downloads/diffusion3d/
+
+
+  ~/pull-comics.sh
