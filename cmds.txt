@@ -22,6 +22,19 @@ python -m local.main_local --step check           # compare open_edges_pieces, f
 modal deploy cloud/modal_app.py                   # redeploy if `modal app list` shows none
 
 
+# ───────────────────────── landscape/scene photo -> depth relief ─────────────────────────
+# For photos the single-object models CANNOT do (landscapes, interiors, anything with no
+# one subject). Produces a bas-relief: a displaced sheet with the photo as texture.
+# Convincing head-on and with small orbits; from the side it is a bent sheet.
+# A real 3D scene needs 20-50 photos and photogrammetry (COLMAP / nerfstudio), not this.
+.venv-img/bin/python -m local.depth2mesh data/input/DSC09961.jpeg
+#   --relief 0.4   more depth separation (also more stretching at edges)
+#   --grid 480     finer mesh
+#   --cut 0.08     drop more smeared faces; holes read better than smears. Range ~0.08-0.2
+# HEIC in: convert on the Mac with `sips -s format jpeg x.heic --out x.jpg` — installing
+# pillow-heif into .venv upgrades Pillow and destabilises TripoSR's pinned deps.
+
+
 # ─────────────────────────── text -> image -> 3D (characters) ───────────────────────────
 python -m local.text_to_prompt /tmp/hongyuye.txt \
   --style "semi-realistic character render, soft volumetric shading, detailed face, open eyes"
@@ -67,3 +80,8 @@ sudo systemctl start ollama
 # SDXL prompts cut at 77 CLIP tokens — the tail is dropped silently, watch for the warning
 # Ollama and SDXL/TripoSR both want the whole 12 GB; never run them at once
 # Don't `pip install` diffusers into .venv — it breaks TripoSR's transformers 4.35
+
+
+
+scp ~/Downloads/diffusion3d/input/DSC09961.jpeg \
+    ivi@ivi-ubuntu.local:~/projects/git/diffusion3d/data/input/
